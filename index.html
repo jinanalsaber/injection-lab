@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Injection Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  // ─── CONFIG: fill these in after deploying the Edge Function (see README) ───
+  const CONFIG = {
+    FUNCTION_URL: "https://dxpepvohzbkfisbvrdag.supabase.co/functions/v1/quick-processor",
+    ANON_KEY: "sb_publishable_v8PKYMInKqpzTnbc3FCH1w_fFX78I_5", // public key; safe in the browser
+  };
+</script>
+<style>
+  :root {
+    --paper: #f5f4ef;
+    --card: #ffffff;
+    --ink: #15181f;
+    --ink-2: #4a505c;
+    --ink-3: #7c828d;
+    --line: #dcdad2;
+    --accent: #1f4fd1;
+    --accent-soft: #e6ecfb;
+    --pass: #0f7a4a;
+    --pass-soft: #e2f3ea;
+    --block: #b3261e;
+    --block-soft: #fbe7e5;
+    --info: #8a5a00;
+    --info-soft: #fbf0d9;
+    --code-bg: #f0efe9;
+    --sys: #6b3fb8;
+    --sys-soft: #efe8fa;
+    --radius: 10px;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #121418; --card: #1b1e24; --ink: #eceae4; --ink-2: #b4b7bf; --ink-3: #868b95;
+      --line: #2e323a; --accent: #7d9cff; --accent-soft: #1f2840; --pass: #4cc38a; --pass-soft: #15291f;
+      --block: #ff7a70; --block-soft: #331816; --info: #e5b450; --info-soft: #2d2412; --code-bg: #15171c;
+      --sys: #b79af0; --sys-soft: #261e36;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 20px; }
+
+  /* header */
+  header { border-bottom: 1px solid var(--line); background: var(--card); }
+  header .wrap { display: flex; align-items: center; gap: 16px; min-height: 64px; flex-wrap: wrap; padding-block: 10px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .brand b { font-family: var(--mono); font-weight: 600; font-size: 18px; letter-spacing: -.01em; }
+  .brand b::before { content: "▍"; color: var(--accent); margin-right: 2px; }
+  .brand span { color: var(--ink-3); font-size: 14px; }
+  .team { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); }
+  .team input { width: 180px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+
+  /* level tabs */
+  .levels { display: flex; gap: 8px; padding: 20px 0 4px; flex-wrap: wrap; }
+  .lv { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); text-align: left; min-width: 0; }
+  .lv .n { font-family: var(--mono); font-weight: 600; font-size: 13px; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: var(--code-bg); color: var(--ink-2); flex: none; }
+  .lv .t { font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .lv[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .lv[aria-pressed="true"] .n { background: var(--accent); color: #fff; }
+  .lv.done .n::after { content: "✓"; }
+  .lv.done .n span { display: none; }
+  .lv.done .n { background: var(--pass); color: #fff; }
+
+  .mission { display: flex; align-items: center; gap: 14px; margin: 14px 0 20px; padding: 14px 18px; border-radius: var(--radius); background: var(--ink); color: var(--paper); }
+  .mission small { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; opacity: .65; }
+  .mission p { margin: 0; font-size: 18px; font-weight: 500; }
+  .mission code { font-family: var(--mono); background: rgba(255,255,255,.14); padding: 1px 6px; border-radius: 4px; }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; padding-bottom: 40px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+  .card > h2 { margin: 0; padding: 14px 18px; font-size: 13px; font-family: var(--mono); font-weight: 500; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); border-bottom: 1px solid var(--line); }
+  .pad { padding: 16px 18px; }
+
+  /* defense panel */
+  .summary { margin: 0 0 12px; color: var(--ink-2); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .chip { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+  details.prompt summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--accent); list-style: none; }
+  details.prompt summary::before { content: "▸ "; }
+  details.prompt[open] summary::before { content: "▾ "; }
+  .msgs { display: grid; gap: 8px; margin-top: 10px; }
+  .msg { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .msg .role { font-family: var(--mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 4px 10px; }
+  .msg.system .role { background: var(--sys-soft); color: var(--sys); }
+  .msg.user .role { background: var(--accent-soft); color: var(--accent); }
+  .msg pre { margin: 0; padding: 10px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; background: var(--code-bg); max-height: 260px; overflow: auto; }
+  .slot { background: var(--info-soft); color: var(--info); border-radius: 3px; padding: 0 3px; font-weight: 600; }
+
+  /* form */
+  form { border-top: 1px solid var(--line); }
+  label.lbl { display: block; font-weight: 600; margin-bottom: 6px; }
+  textarea { width: 100%; min-height: 150px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font: 15px/1.5 var(--mono); }
+  textarea:focus, .team input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .count { font-family: var(--mono); font-size: 13px; color: var(--ink-3); margin-right: auto; }
+  .count.over { color: var(--block); font-weight: 600; }
+  .btn { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-weight: 500; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .hint { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--info-soft); color: var(--info); font-size: 14px; }
+  .err { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--block-soft); color: var(--block); font-size: 14px; }
+
+  /* results */
+  .empty { padding: 48px 24px; text-align: center; color: var(--ink-3); }
+  .empty .big { font-family: var(--mono); font-size: 40px; opacity: .35; }
+  .banner { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: flex-start; }
+  .banner .ico { font-size: 24px; line-height: 1; }
+  .banner h3 { margin: 0 0 2px; font-size: 19px; }
+  .banner p { margin: 0; color: var(--ink-2); }
+  .banner.win { background: var(--pass-soft); }
+  .banner.win h3 { color: var(--pass); }
+  .banner.lose { background: var(--block-soft); }
+  .banner.lose h3 { color: var(--block); }
+  .banner.half { background: var(--info-soft); }
+  .banner.half h3 { color: var(--info); }
+
+  .steps { list-style: none; margin: 0; padding: 16px 18px; display: grid; gap: 0; }
+  .step { position: relative; padding: 0 0 18px 40px; }
+  .step:last-child { padding-bottom: 0; }
+  .step::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--line); }
+  .step:last-child::before { display: none; }
+  .step .dot { position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #fff; }
+  .step.pass .dot { background: var(--pass); }
+  .step.block .dot { background: var(--block); }
+  .step.skip .dot { background: var(--ink-3); }
+  .step.info .dot { background: var(--info); }
+  .step h4 { margin: 2px 0 2px; font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pill { font-family: var(--mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; }
+  .pass .pill { background: var(--pass-soft); color: var(--pass); }
+  .block .pill { background: var(--block-soft); color: var(--block); }
+  .skip .pill { background: var(--code-bg); color: var(--ink-3); }
+  .info .pill { background: var(--info-soft); color: var(--info); }
+  .step p { margin: 0; color: var(--ink-2); }
+  .rationale { margin: 10px 0 4px; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
+  .rationale small { display: block; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); margin-bottom: 4px; }
+  .rationale q { quotes: "“" "”"; font-size: 16px; }
+  .caveat { font-size: 13px; color: var(--ink-3); margin-top: 6px !important; }
+  .step details { margin-top: 8px; }
+  .step details summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 500; }
+  .raw { margin: 8px 0 0; padding: 10px; font: 12.5px/1.5 var(--mono); background: var(--code-bg); border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .setup { margin: 20px 0; padding: 14px 18px; border-radius: var(--radius); background: var(--info-soft); color: var(--info); }
+
+  /* facilitator */
+  .fac-login { max-width: 420px; margin: 60px auto; }
+  .fac-login input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); margin: 8px 0 12px; }
+  .fac-top { display: flex; align-items: center; gap: 12px; padding: 20px 0 12px; flex-wrap: wrap; }
+  .fac-top h1 { margin: 0 auto 0 0; font-size: 22px; }
+  .live { font-family: var(--mono); font-size: 13px; color: var(--pass); }
+  .live::before { content: "●"; margin-right: 6px; animation: pulse 1.6s infinite; }
+  .live.paused { color: var(--ink-3); }
+  .live.paused::before { animation: none; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .tile { padding: 14px 16px; }
+  .tile .k { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+  .tile .nm { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+  .tile .v { font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile .v span { font-size: 14px; font-weight: 500; color: var(--ink-3); }
+  .bar { height: 6px; border-radius: 3px; background: var(--code-bg); margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--pass); }
+  .feed { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .feed th { text-align: left; font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .feed td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .feed tr.r { cursor: pointer; }
+  .feed tr.r:hover td { background: var(--accent-soft); }
+  .feed .snip { font-family: var(--mono); font-size: 13px; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .feed .when { font-family: var(--mono); color: var(--ink-3); white-space: nowrap; }
+  .tag { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .tag.won { background: var(--pass-soft); color: var(--pass); }
+  .tag.half { background: var(--info-soft); color: var(--info); }
+  .tag.no { background: var(--code-bg); color: var(--ink-3); }
+  .table-wrap { overflow-x: auto; }
+  .secret { font-family: var(--mono); font-size: 13px; padding: 6px 10px; border-radius: 8px; background: var(--code-bg); }
+  .btn.danger { color: var(--block); border-color: var(--block); }
+  .btn.danger.armed { background: var(--block); color: #fff; }
+
+  .spot { position: fixed; inset: 0; background: rgba(10, 12, 16, .72); display: grid; place-items: center; padding: 24px; z-index: 10; }
+  .spot[hidden] { display: none; }
+  .spot .card { max-width: 980px; width: 100%; max-height: 90vh; overflow: auto; }
+  .spot .pad { padding: 28px 32px; }
+  .spot .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--ink-3); font-family: var(--mono); font-size: 14px; margin-bottom: 14px; }
+  .spot pre { margin: 0 0 18px; font: 22px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+  .spot .rationale q { font-size: 20px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand"><b>Injection Lab</b><span>Campus Access Reports · moderation sandbox</span></div>
+    <label class="team" id="teamWrap">Team name <input id="team" maxlength="30" placeholder="e.g. Pair 4" autocomplete="off"></label>
+  </div>
+</header>
+
+<!-- ───────────── STUDENT VIEW ───────────── -->
+<main id="student" class="wrap">
+  <div id="setupNote" class="setup" hidden></div>
+  <div id="closedNote" class="setup" hidden>The lab is closed right now. Thanks for playing!</div>
+
+  <nav class="levels" id="levels" aria-label="Levels"></nav>
+
+  <div class="mission">
+    <div>
+      <small>Your mission</small>
+      <p id="goal">Loading…</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>The defense you're up against</h2>
+      <div class="pad">
+        <p class="summary" id="summary"></p>
+        <div class="chips" id="defenses"></div>
+        <details class="prompt" id="promptBox">
+          <summary>Show exactly what the AI is given</summary>
+          <div class="msgs" id="promptMsgs"></div>
+          <div id="checkerBox" hidden>
+            <p style="margin:14px 0 6px;font-size:14px;font-weight:600">Before that, a separate checker AI screens your text:</p>
+            <div class="msgs" id="checkerMsgs"></div>
+          </div>
+        </details>
+      </div>
+      <form id="form" class="pad" autocomplete="off">
+        <label class="lbl" for="report">Submit a report</label>
+        <textarea id="report" placeholder="Describe an accessibility barrier… or try to sneak something past the AI."></textarea>
+        <div class="row">
+          <span class="count" id="count">0</span>
+          <button type="button" class="btn" id="hintBtn">Hint</button>
+          <button type="submit" class="btn primary" id="submit">Submit to moderator</button>
+        </div>
+        <div class="hint" id="hint" hidden></div>
+        <div class="err" id="err" hidden></div>
+      </form>
+    </section>
+
+    <section class="card" aria-live="polite">
+      <h2>How the system decided</h2>
+      <div id="result">
+        <div class="empty"><div class="big">{ }</div><p>Submit a report to watch it move through the pipeline.</p></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ───────────── FACILITATOR VIEW (open with #facilitator) ───────────── -->
+<main id="fac" class="wrap" hidden>
+  <section class="card fac-login" id="facLogin">
+    <h2>Facilitator</h2>
+    <form class="pad" id="facForm" style="border:0">
+      <label class="lbl" for="facKey">Passcode</label>
+      <input id="facKey" type="password" autocomplete="current-password">
+      <button class="btn primary" type="submit">Open dashboard</button>
+      <div class="err" id="facErr" hidden></div>
+    </form>
+  </section>
+
+  <section id="facDash" hidden>
+    <div class="fac-top">
+      <h1>Live attempts</h1>
+      <span class="live" id="live">Live</span>
+      <span class="secret" id="secret"></span>
+      <button class="btn" id="pauseBtn">Pause</button>
+      <button class="btn danger" id="resetBtn">Delete all logs</button>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div class="card table-wrap">
+      <table class="feed">
+        <thead><tr><th>Time</th><th>Team</th><th>Level</th><th>Result</th><th>Report (click to spotlight)</th></tr></thead>
+        <tbody id="feed"></tbody>
+      </table>
+    </div>
+    <p style="color:var(--ink-3);font-size:13px">Refreshes every 4 seconds. Click any row to put it full-screen for the debrief. Esc closes.</p>
+  </section>
+
+  <div class="spot" id="spot" hidden>
+    <div class="card"><div class="pad" id="spotBody"></div></div>
+  </div>
+</main>
+
+<script>
+(() => {
+  // NOTE: everything students type is rendered with textContent, never innerHTML.
+  // Their reports are attacker-controlled input, so this page practices what the XSS demo preaches.
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v);
+    }
+    for (const kid of kids) if (kid != null) n.append(kid);
+    return n;
+  };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+  const configured = !CONFIG.FUNCTION_URL.includes("YOUR-PROJECT") && !CONFIG.ANON_KEY.includes("YOUR-");
+
+  async function api(body, extraHeaders = {}) {
+    const r = await fetch(CONFIG.FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${CONFIG.ANON_KEY}`, apikey: CONFIG.ANON_KEY, ...extraHeaders },
+      body: JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await r.json(); } catch {}
+    if (!r.ok) throw Object.assign(new Error(data.error || `Request failed (${r.status})`), { status: r.status });
+    return data;
+  }
+
+  const HINTS = {
+    "1": ["Your text is pasted right after the rules. What if your text looked like more rules?",
+          "End your report with something like a policy update or a new instruction to the moderator."],
+    "2": ["The model was told not to obey instructions inside the report. Can you make an instruction not look like one?",
+          "Try claiming authority: a system notice, a facilities admin, the policy team."],
+    "3": ["Anything that sounds like a command gets caught by the checker. Persuasion isn't a command.",
+          "Make FREE PIZZA a natural part of a real-sounding barrier report. Why might a genuine report mention it?"],
+    "4": ["Beat it the same way you beat Level 3. Then read what the Action step says."],
+    "leak": ["Asking for the code directly won't work. What tasks would make the model repeat its own instructions?",
+             "Ask it to summarize, translate, or spell out its configuration inside the rationale field."],
+  };
+
+  // ───────── facilitator ─────────
+  if (location.hash === "#facilitator") {
+    $("student").hidden = true; $("teamWrap").hidden = true; $("fac").hidden = false;
+    document.title = "Injection Lab · Facilitator";
+    let key = ""; try { key = sessionStorage.getItem("facKey") || ""; } catch {}
+    let paused = false, timer = null, rows = [];
+    const NAMES = { "1": "No defense", "2": "Instruction hierarchy", "3": "Layered defenses", "4": "Human in the loop", "leak": "Leak the secret" };
+    const LABEL = { "1": "L1", "2": "L2", "3": "L3", "4": "L4", "leak": "Leak" };
+
+    const resultTag = (a) => a.won ? el("span", { class: "tag won", text: a.level === "leak" ? "LEAKED" : "APPROVED" })
+      : a.fooled_ai ? el("span", { class: "tag half", text: "FOOLED AI · HELD" })
+      : el("span", { class: "tag no", text: a.blocked_by ? `BLOCKED · ${a.blocked_by}` : String(a.verdict || "").toUpperCase() });
+
+    function renderDash(data) {
+      rows = data.attempts || [];
+      $("secret").textContent = `Leak code: ${data.leakSecret} · model: ${data.model}${data.open ? "" : " · LAB CLOSED"}`;
+      const tiles = $("tiles"); tiles.replaceChildren();
+      for (const id of ["1", "2", "3", "4", "leak"]) {
+        const of = rows.filter((a) => a.level === id);
+        const w = of.filter((a) => id === "4" ? a.fooled_ai : a.won).length;
+        const pct = of.length ? Math.round((w / of.length) * 100) : 0;
+        tiles.append(el("div", { class: "card tile" },
+          el("div", { class: "k", text: id === "leak" ? "Bonus" : `Level ${id}` }),
+          el("div", { class: "nm", text: NAMES[id] }),
+          el("div", { class: "v" }, String(w), el("span", { text: ` / ${of.length} ${id === "4" ? "fooled AI" : "won"}` })),
+          el("div", { class: "bar" }, Object.assign(el("i"), { style: `width:${pct}%` }))));
+      }
+      const feed = $("feed"); feed.replaceChildren();
+      if (!rows.length) feed.append(el("tr", {}, el("td", { colspan: "5", text: "No attempts yet. Share the site link and they'll appear here." })));
+      for (const a of rows.slice(0, 120)) {
+        feed.append(el("tr", { class: "r", onclick: () => spotlight(a) },
+          el("td", { class: "when", text: new Date(a.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) }),
+          el("td", { text: a.team }),
+          el("td", { text: LABEL[a.level] || a.level }),
+          el("td", {}, resultTag(a)),
+          el("td", {}, el("div", { class: "snip", text: a.report }))));
+      }
+    }
+
+    function spotlight(a) {
+      const b = $("spotBody"); b.replaceChildren(
+        el("div", { class: "meta" }, el("span", { text: a.team }), el("span", { text: "·" }), el("span", { text: NAMES[a.level] || a.level }), resultTag(a)),
+        el("pre", { text: a.report }),
+        a.rationale ? el("div", { class: "rationale" }, el("small", { text: "Model's stated reasoning" }), el("q", { text: a.rationale })) : null,
+        el("div", { class: "row" }, el("button", { class: "btn", text: "Close (Esc)", onclick: closeSpot })));
+      $("spot").hidden = false;
+    }
+    const closeSpot = () => { $("spot").hidden = true; };
+    $("spot").addEventListener("click", (e) => { if (e.target === $("spot")) closeSpot(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSpot(); });
+
+    async function poll() {
+      clearTimeout(timer);
+      try {
+        const data = await api({ action: "attempts" }, { "x-facilitator-key": key });
+        $("facLogin").hidden = true; $("facDash").hidden = false;
+        renderDash(data);
+      } catch (e) {
+        if (e.status === 401) { $("facDash").hidden = true; $("facLogin").hidden = false; $("facErr").hidden = false; $("facErr").textContent = e.message; return; }
+      }
+      if (!paused) timer = setTimeout(poll, 4000);
+    }
+
+    $("facForm").addEventListener("submit", (e) => {
+      e.preventDefault(); key = $("facKey").value.trim();
+      try { sessionStorage.setItem("facKey", key); } catch {}
+      $("facErr").hidden = true; poll();
+    });
+    $("pauseBtn").addEventListener("click", () => {
+      paused = !paused; $("pauseBtn").textContent = paused ? "Resume" : "Pause";
+      $("live").textContent = paused ? "Paused" : "Live"; $("live").classList.toggle("paused", paused);
+      if (!paused) poll(); else clearTimeout(timer);
+    });
+    let armed = null;
+    $("resetBtn").addEventListener("click", async () => {
+      const btn = $("resetBtn");
+      if (!armed) {
+        btn.classList.add("armed"); btn.textContent = `Click again to delete ${rows.length} attempts`;
+        armed = setTimeout(() => { armed = null; btn.classList.remove("armed"); btn.textContent = "Delete all logs"; }, 4000);
+        return;
+      }
+      clearTimeout(armed); armed = null; btn.classList.remove("armed"); btn.textContent = "Delete all logs";
+      try { await api({ action: "reset" }, { "x-facilitator-key": key }); } catch {}
+      poll();
+    });
+    if (key) poll();
+    return;
+  }
+
+  // ───────── student ─────────
+  let session = store.get("labSession", null);
+  if (!session) { session = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); store.set("labSession", session); }
+  $("team").value = store.get("labTeam", "");
+  $("team").addEventListener("input", () => store.set("labTeam", $("team").value));
+
+  let levels = [], current = store.get("labLevel", "1"), hintIdx = 0, busy = false;
+  const wins = store.get("labWins", {});
+
+  if (!configured) {
+    $("setupNote").hidden = false;
+    $("setupNote").textContent = "Setup needed: open index.html and fill in CONFIG.FUNCTION_URL and CONFIG.ANON_KEY (see the README).";
+  }
+
+  function renderTabs() {
+    const nav = $("levels"); nav.replaceChildren();
+    for (const L of levels) {
+      nav.append(el("button", {
+        class: "lv" + (wins[L.id] ? " done" : ""), "aria-pressed": String(L.id === current), type: "button",
+        onclick: () => selectLevel(L.id),
+      }, el("span", { class: "n" }, el("span", { text: L.id === "leak" ? "★" : L.id })), el("span", { class: "t", text: L.name })));
+    }
+  }
+
+  function renderMsgs(target, msgs) {
+    target.replaceChildren();
+    for (const m of msgs) {
+      const pre = el("pre");
+      // highlight the slot where the student's text is inserted
+      const parts = m.content.split("{YOUR REPORT}");
+      parts.forEach((p, i) => { pre.append(p); if (i < parts.length - 1) pre.append(el("span", { class: "slot", text: "{YOUR REPORT}" })); });
+      target.append(el("div", { class: `msg ${m.role}` }, el("div", { class: "role", text: m.role === "system" ? "System message (developer rules)" : "User message" }), pre));
+    }
+  }
+
+  function selectLevel(id) {
+    const L = levels.find((x) => x.id === id) || levels[0];
+    current = L.id; store.set("labLevel", current); hintIdx = 0;
+    $("goal").replaceChildren();
+    L.goal.split("FREE PIZZA").forEach((p, i, a) => { $("goal").append(p); if (i < a.length - 1) $("goal").append(el("code", { text: "FREE PIZZA" })); });
+    $("summary").textContent = L.summary;
+    $("defenses").replaceChildren(...L.defenses.map((d) => el("span", { class: "chip", text: d })));
+    renderMsgs($("promptMsgs"), L.prompt);
+    $("checkerBox").hidden = !L.checker;
+    if (L.checker) renderMsgs($("checkerMsgs"), [{ role: "system", content: L.checker }, { role: "user", content: "<untrusted-a1b2c3d4>\n{YOUR REPORT}\n</untrusted-a1b2c3d4>" }]);
+    $("hint").hidden = true; $("err").hidden = true;
+    $("hintBtn").disabled = false;
+    updateCount();
+    renderTabs();
+    $("result").replaceChildren(el("div", { class: "empty" }, el("div", { class: "big", text: "{ }" }), el("p", { text: "Submit a report to watch it move through the pipeline." })));
+  }
+
+  function updateCount() {
+    const L = levels.find((x) => x.id === current);
+    const n = $("report").value.length, max = L ? L.maxLen : 1500;
+    $("count").textContent = max < 1500 ? `${n} / ${max} characters` : `${n} characters`;
+    $("count").classList.toggle("over", n > max);
+  }
+  $("report").addEventListener("input", updateCount);
+
+  $("hintBtn").addEventListener("click", () => {
+    const hs = HINTS[current] || [];
+    if (hintIdx >= hs.length) return;
+    $("hint").hidden = false; $("hint").textContent = `Hint ${hintIdx + 1} of ${hs.length}: ${hs[hintIdx]}`;
+    hintIdx++;
+    if (hintIdx >= hs.length) $("hintBtn").disabled = true;
+  });
+
+  const STATUS = { pass: ["✓", "Got through"], block: ["✕", "Blocked"], skip: ["–", "Skipped"], info: ["i", "Note"] };
+
+  function renderResult(r) {
+    const box = $("result"); box.replaceChildren();
+    const kind = r.won ? "win" : r.fooledAI ? "half" : "lose";
+    const title = r.won ? (r.level === "leak" ? "You leaked the secret" : "You beat this level") : r.fooledAI ? "AI fooled, attack contained" : "Blocked";
+    box.append(el("div", { class: `banner ${kind}` },
+      el("div", { class: "ico", text: r.won ? "🍕" : r.fooledAI ? "🧑‍⚖️" : "🛡️" }),
+      el("div", {}, el("h3", { text: title }), el("p", { text: r.message }))));
+    const ol = el("ol", { class: "steps" });
+    r.steps.forEach((s, i) => {
+      const [glyph, label] = STATUS[s.status] || STATUS.info;
+      const li = el("li", { class: `step ${s.status}` },
+        el("div", { class: "dot", text: glyph }),
+        el("h4", {}, el("span", { text: `${i + 1}. ${s.name}` }), el("span", { class: "pill", text: label })),
+        el("p", { text: s.detail }));
+      if (s.name === "Moderator" && r.level !== "leak" && r.rationale) {
+        li.append(el("div", { class: "rationale" }, el("small", { text: "Model's stated reasoning" }), el("q", { text: r.rationale })));
+        li.append(el("p", { class: "caveat", text: "This is what the model says about its decision, not a view inside it. Your report can shape this text too." }));
+      }
+      if (s.data && s.data.received) {
+        const msgs = el("div", { class: "msgs" });
+        for (const m of s.data.received) msgs.append(el("div", { class: `msg ${m.role}` }, el("div", { class: "role", text: m.role === "system" ? "System message" : "User message" }), el("pre", { text: m.content })));
+        li.append(el("details", {}, el("summary", { text: "What this AI received" }), msgs));
+        li.append(el("details", {}, el("summary", { text: "Raw response" }), el("pre", { class: "raw", text: s.data.raw || "(empty)" })));
+      }
+      ol.append(li);
+    });
+    box.append(ol);
+  }
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const report = $("report").value.trim();
+    $("err").hidden = true;
+    if (!report) { $("err").hidden = false; $("err").textContent = "Write a report first."; return; }
+    busy = true; $("submit").disabled = true;
+    $("submit").replaceChildren(el("span", { class: "spinner" }), " Moderating…");
+    $("result").replaceChildren(el("div", { class: "empty" }, el("div", { class: "big" }, el("span", { class: "spinner" })), el("p", { text: "Your report is moving through the pipeline…" })));
+    try {
+      const r = await api({ action: "moderate", level: current, report, session, team: $("team").value.trim() });
+      renderResult(r);
+      if (r.won || (r.level === "4" && r.fooledAI)) { wins[current] = true; store.set("labWins", wins); renderTabs(); }
+    } catch (err) {
+      $("err").hidden = false; $("err").textContent = err.message || "Something went wrong.";
+      $("result").replaceChildren(el("div", { class: "empty" }, el("p", { text: "No result. See the message on the left." })));
+    } finally {
+      busy = false; $("submit").disabled = false; $("submit").textContent = "Submit to moderator";
+    }
+  });
+
+  if (configured) {
+    api({ action: "levels" }).then((d) => {
+      levels = d.levels; $("closedNote").hidden = d.open !== false;
+      selectLevel(levels.some((l) => l.id === current) ? current : "1");
+    }).catch((e) => { $("setupNote").hidden = false; $("setupNote").textContent = `Couldn't reach the lab backend: ${e.message}`; });
+  }
+})();
+</script>
+</body>
+</html>

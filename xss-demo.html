@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XSS Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Facilitator-only demo. Runs entirely in this browser tab: nothing is saved or sent anywhere,
+     so the "stored" XSS only ever hits the presenter's own screen. */
+  :root { --paper:#f5f4ef; --card:#fff; --ink:#15181f; --ink-2:#4a505c; --ink-3:#7c828d; --line:#dcdad2;
+          --accent:#1f4fd1; --accent-soft:#e6ecfb; --pass:#0f7a4a; --pass-soft:#e2f3ea; --block:#b3261e; --block-soft:#fbe7e5; --code:#f0efe9;
+          --mono:"IBM Plex Mono",ui-monospace,monospace; --sans:"IBM Plex Sans",system-ui,sans-serif; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.5 var(--sans); transition: background .3s; }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px 20px 48px; }
+  h1 { margin:0 0 4px; font-size:26px; } .sub { margin:0 0 22px; color:var(--ink-2); }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:20px; align-items:start; }
+  @media (max-width:860px){ .grid{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  .card h2 { margin:0; padding:12px 16px; font:500 12px var(--mono); text-transform:uppercase; letter-spacing:.07em; color:var(--ink-3); border-bottom:1px solid var(--line); }
+  .pad { padding:16px; }
+  textarea { width:100%; min-height:110px; padding:10px; border:1px solid var(--line); border-radius:8px; font:15px/1.5 var(--mono); background:var(--paper); resize:vertical; }
+  .btn { padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); font:inherit; font-size:15px; font-weight:500; cursor:pointer; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .toggle { display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; width:max-content; margin-bottom:14px; }
+  .toggle button { border:0; padding:8px 16px; background:transparent; font:inherit; font-size:15px; font-weight:600; cursor:pointer; }
+  .toggle button[aria-pressed=true].unsafe { background:var(--block); color:#fff; }
+  .toggle button[aria-pressed=true].safe { background:var(--pass); color:#fff; }
+  .code { font:13.5px/1.55 var(--mono); background:var(--code); border-radius:8px; padding:10px 12px; white-space:pre-wrap; }
+  .code .hl { color:var(--block); font-weight:600; } .code .ok { color:var(--pass); font-weight:600; }
+  .q { list-style:none; margin:0; padding:0; }
+  .q li { padding:14px 16px; border-bottom:1px solid var(--line); display:grid; grid-template-columns:1fr auto; gap:4px 12px; }
+  .q li:last-child { border-bottom:0; }
+  .q .who { font:12px var(--mono); color:var(--ink-3); }
+  .q .body { grid-column:1; word-break:break-word; }
+  .q .acts { grid-row:1 / span 2; grid-column:2; display:flex; gap:6px; align-items:start; }
+  .q .acts span { font-size:13px; padding:4px 10px; border-radius:6px; border:1px solid var(--line); color:var(--ink-2); }
+  .pwned-banner { display:none; position:fixed; left:0; right:0; bottom:0; padding:18px 24px; background:#b3261e; color:#fff; font-size:20px; font-weight:600; text-align:center; z-index:5; }
+  body.pwned { background:#f6c9c5; }
+  body.pwned .pwned-banner { display:block; }
+  .note { font-size:14px; color:var(--ink-3); margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stored XSS: when a report becomes code</h1>
+  <p class="sub">A fake moderation dashboard. Submit a report, and every moderator who opens the queue sees it, or runs it.</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1 · Attacker submits a report</h2>
+      <div class="pad">
+        <textarea id="input">Ramp outside Haggard Hall is blocked by a bike rack.</textarea>
+        <div class="row">
+          <button class="btn" id="p1">Payload: bold text</button>
+          <button class="btn" id="p2">Payload: run code</button>
+          <button class="btn primary" id="add">Submit report</button>
+        </div>
+        <p class="note">The "run code" payload only changes this page's colors. A real attacker would send the moderator's login session to their own server instead.</p>
+      </div>
+      <h2>2 · How the dashboard displays reports</h2>
+      <div class="pad">
+        <div class="toggle" role="group" aria-label="Rendering">
+          <button class="unsafe" id="unsafeBtn" aria-pressed="true">Unsafe</button>
+          <button class="safe" id="safeBtn" aria-pressed="false">Safe</button>
+        </div>
+        <div class="code" id="codeView"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3 · Moderator's queue</h2>
+      <ul class="q" id="queue"></ul>
+    </section>
+  </div>
+</div>
+<div class="pwned-banner">⚠ Code from a report just ran in the moderator's browser.</div>
+
+<script>
+  const reports = [
+    { who: "student · 10:02", text: "Automatic door opener at the library's south entrance has been broken for a week." },
+    { who: "student · 10:09", text: "Elevator in the Communications Facility is out of service. No sign posted." },
+  ];
+  let safe = false;
+  const $ = (id) => document.getElementById(id);
+
+  function renderCode() {
+    $("codeView").innerHTML = safe
+      ? 'item.<span class="ok">textContent</span> = report.text;\n<span class="ok">// Browser shows the text as text. Tags stay visible, nothing runs.</span>'
+      : 'item.<span class="hl">innerHTML</span> = report.text;\n<span class="hl">// Browser parses the text as HTML. Tags in a report become real elements.</span>';
+  }
+  function render() {
+    document.body.classList.remove("pwned");
+    const q = $("queue"); q.replaceChildren();
+    for (const r of reports) {
+      const li = document.createElement("li");
+      const who = document.createElement("div"); who.className = "who"; who.textContent = r.who;
+      const body = document.createElement("div"); body.className = "body";
+      if (safe) body.textContent = r.text;   // ✅ the fix
+      else body.innerHTML = r.text;          // ❌ the bug (deliberate)
+      const acts = document.createElement("div"); acts.className = "acts";
+      acts.innerHTML = "<span>Approve</span><span>Reject</span>";
+      li.append(who, acts, body); q.append(li);
+    }
+  }
+  function setMode(isSafe) {
+    safe = isSafe;
+    $("safeBtn").setAttribute("aria-pressed", String(safe));
+    $("unsafeBtn").setAttribute("aria-pressed", String(!safe));
+    renderCode(); render();
+  }
+  $("p1").onclick = () => { $("input").value = 'Ramp blocked <b style="font-size:28px;color:#b3261e">AND THIS TEXT IS HUGE</b>'; };
+  $("p2").onclick = () => { $("input").value = 'Curb cut broken <img src="x" onerror="document.body.classList.add(\'pwned\')">'; };
+  $("add").onclick = () => {
+    const t = $("input").value.trim(); if (!t) return;
+    reports.unshift({ who: "anonymous · just now", text: t }); render();
+  };
+  $("unsafeBtn").onclick = () => setMode(false);
+  $("safeBtn").onclick = () => setMode(true);
+  setMode(false);
+</script>
+</body>
+</html>
