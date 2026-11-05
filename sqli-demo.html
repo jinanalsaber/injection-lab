@@ -52,9 +52,19 @@
   .why p { margin:0 0 8px; color:var(--ink-2); }
   .why p:last-child { margin:0; }
   .loading { padding:40px; text-align:center; color:var(--ink-3); }
+
+  .topnav { background:var(--card); border-bottom:1px solid var(--line); }
+  .topnav .in { max-width:1180px; margin:0 auto; padding:10px 20px; display:flex; align-items:center; gap:6px 18px; flex-wrap:wrap; }
+  .topnav .brand { font:600 17px var(--mono); margin-right:auto; color:var(--ink); text-decoration:none; }
+  .topnav .brand::before { content:"▍"; color:var(--accent); margin-right:2px; }
+  .navlinks { display:flex; gap:4px; flex-wrap:wrap; }
+  .navlinks a { padding:6px 12px; border-radius:8px; color:var(--ink-2); text-decoration:none; font-size:15px; font-weight:500; }
+  .navlinks a:hover { background:var(--code); color:var(--ink); }
+  .navlinks a[aria-current=page] { background:var(--accent-soft); color:var(--accent); font-weight:600; }
 </style>
 </head>
 <body>
+<nav class="topnav" aria-label="Demos"><div class="in"><a class="brand" href="index.html">Injection Lab</a><div class="navlinks"><a href="index.html">Prompt injection lab</a><a href="sqli-demo.html" aria-current="page">SQL injection</a><a href="xss-demo.html">XSS</a></div></div></nav>
 <div class="wrap">
   <h1>SQL injection: when input becomes a query</h1>
   <p class="sub">The same mistake as prompt injection, 25 years earlier. Watch the yellow text: that's what the user typed, pasted straight into the database command.</p>
