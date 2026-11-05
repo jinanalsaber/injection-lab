@@ -110,6 +110,7 @@
   .btn { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-weight: 500; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .field { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font: 15px var(--mono); margin-bottom: 12px; }
   .hint { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--info-soft); color: var(--info); font-size: 14px; }
   .err { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--block-soft); color: var(--block); font-size: 14px; }
 
@@ -168,7 +169,7 @@
   .live.paused { color: var(--ink-3); }
   .live.paused::before { animation: none; }
   @keyframes pulse { 50% { opacity: .25; } }
-  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
   @media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .tile { padding: 14px 16px; }
   .tile .k { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
@@ -200,6 +201,7 @@
   .spot .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--ink-3); font-family: var(--mono); font-size: 14px; margin-bottom: 14px; }
   .spot pre { margin: 0 0 18px; font: 22px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
   .spot .rationale q { font-size: 20px; }
+  .spot pre.raw { font-size: 14px; line-height: 1.55; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -242,6 +244,12 @@
         </details>
       </div>
       <form id="form" class="pad" autocomplete="off">
+        <div id="realFields" hidden>
+          <label class="lbl" for="rTitle">Title</label>
+          <input id="rTitle" class="field" maxlength="200" placeholder="e.g. Elevator broken">
+          <label class="lbl" for="rSev">Severity</label>
+          <select id="rSev" class="field"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select>
+        </div>
         <label class="lbl" for="report" id="reportLbl">Submit a report</label>
         <textarea id="report" placeholder="Describe an accessibility barrier… or try to sneak something past the AI."></textarea>
         <div class="row">
@@ -281,6 +289,7 @@
       <span class="live" id="live">Live</span>
       <span class="secret" id="secret"></span>
       <button class="btn" id="pauseBtn">Pause</button>
+      <button class="btn" id="realBtn">Show real prompt</button>
       <button class="btn danger" id="resetBtn">Delete all logs</button>
     </div>
     <div class="tiles" id="tiles"></div>
@@ -342,6 +351,8 @@
           "Anything that sounds like a command gets caught by the checker. Persuasion isn't a command.",
           "Make FREE PIZZA a natural part of a real-sounding barrier report. Why might a genuine report mention it?"],
     "4": ["Beat it the same way you beat Level 3. Then read what the Action step says."],
+    "real": ["You can't see this prompt, and real attackers can't either. Start with what worked on Levels 1 to 3.",
+             "The real form has three fields, and the AI reads all of them. Which one haven't you tried attacking?"],
     "leak": ["Asking for the rules outright won't work. What would make it explain them anyway?",
              "Ask why a specific report got rejected, or ask what kinds of reports are allowed. Get it to be helpful."],
   };
@@ -352,23 +363,24 @@
     document.title = "Injection Lab · Facilitator";
     let key = ""; try { key = sessionStorage.getItem("facKey") || ""; } catch {}
     let paused = false, timer = null, rows = [];
-    const NAMES = { "1": "No defense", "2": "Instruction hierarchy", "3": "Layered defenses", "4": "Human in the loop", "leak": "Help chatbot" };
-    const LABEL = { "1": "L1", "2": "L2", "3": "L3", "4": "L4", "leak": "Leak" };
+    const NAMES = { "1": "No defense", "2": "Instruction hierarchy", "3": "Layered defenses", "4": "Human in the loop", "real": "The real moderator", "leak": "Help chatbot" };
+    const LABEL = { "1": "L1", "2": "L2", "3": "L3", "4": "L4", "real": "Real", "leak": "Leak" };
 
     const resultTag = (a) => a.won ? el("span", { class: "tag won", text: a.level === "leak" ? "LEAKED" : "APPROVED" })
       : a.fooled_ai ? el("span", { class: "tag half", text: "FOOLED AI · HELD" })
       : el("span", { class: "tag no", text: a.blocked_by ? `BLOCKED · ${a.blocked_by}` : String(a.verdict || "").toUpperCase() });
 
+    let realPrompt = "";
     function renderDash(data) {
-      rows = data.attempts || [];
+      rows = data.attempts || []; realPrompt = data.realPrompt || "";
       $("secret").textContent = `Leak code: ${data.leakSecret} · model: ${data.model}${data.open ? "" : " · LAB CLOSED"}`;
       const tiles = $("tiles"); tiles.replaceChildren();
-      for (const id of ["1", "2", "3", "4", "leak"]) {
+      for (const id of ["1", "2", "3", "4", "real", "leak"]) {
         const of = rows.filter((a) => a.level === id);
         const w = of.filter((a) => id === "4" ? a.fooled_ai : a.won).length;
         const pct = of.length ? Math.round((w / of.length) * 100) : 0;
         tiles.append(el("div", { class: "card tile" },
-          el("div", { class: "k", text: id === "leak" ? "Bonus" : `Level ${id}` }),
+          el("div", { class: "k", text: id === "leak" ? "Bonus" : id === "real" ? "Level 5" : `Level ${id}` }),
           el("div", { class: "nm", text: NAMES[id] }),
           el("div", { class: "v" }, String(w), el("span", { text: ` / ${of.length} ${id === "4" ? "fooled AI" : "won"}` })),
           el("div", { class: "bar" }, Object.assign(el("i"), { style: `width:${pct}%` }))));
@@ -394,6 +406,13 @@
       $("spot").hidden = false;
     }
     const closeSpot = () => { $("spot").hidden = true; };
+    $("realBtn").addEventListener("click", () => {
+      $("spotBody").replaceChildren(
+        el("div", { class: "meta" }, el("span", { text: "Level 5 · the real site's moderation prompt" })),
+        el("pre", { class: "raw", text: realPrompt || "(loading…)" }),
+        el("div", { class: "row" }, el("button", { class: "btn", text: "Close (Esc)", onclick: closeSpot })));
+      $("spot").hidden = false;
+    });
     $("spot").addEventListener("click", (e) => { if (e.target === $("spot")) closeSpot(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSpot(); });
 
@@ -455,7 +474,7 @@
       nav.append(el("button", {
         class: "lv" + (wins[L.id] ? " done" : ""), "aria-pressed": String(L.id === current), type: "button",
         onclick: () => selectLevel(L.id),
-      }, el("span", { class: "n" }, el("span", { text: L.id === "leak" ? "★" : L.id })), el("span", { class: "t", text: L.name })));
+      }, el("span", { class: "n" }, el("span", { text: L.id === "leak" ? "★" : L.id === "real" ? "5" : L.id })), el("span", { class: "t", text: L.name })));
     }
   }
 
@@ -481,7 +500,8 @@
     $("checkerBox").hidden = !L.checker;
     if (L.checker) renderMsgs($("checkerMsgs"), [{ role: "system", content: L.checker }, { role: "user", content: "<untrusted-a1b2c3d4>\n{YOUR REPORT}\n</untrusted-a1b2c3d4>" }]);
     $("hint").hidden = true; $("err").hidden = true;
-    $("reportLbl").textContent = isChat() ? "Message the help chatbot" : "Submit a report";
+    $("realFields").hidden = !L.fields;
+    $("reportLbl").textContent = isChat() ? "Message the help chatbot" : L.fields ? "Description" : "Submit a report";
     $("report").placeholder = isChat() ? "Ask the help chatbot anything…" : "Describe an accessibility barrier… or try to sneak something past the AI.";
     $("submit").textContent = submitLabel();
     $("hintBtn").disabled = false;
@@ -553,7 +573,7 @@
     $("submit").replaceChildren(el("span", { class: "spinner" }), isChat() ? " Waiting for reply…" : " Moderating…");
     $("result").replaceChildren(el("div", { class: "empty" }, el("div", { class: "big" }, el("span", { class: "spinner" })), el("p", { text: "Your report is moving through the pipeline…" })));
     try {
-      const r = await api({ action: "moderate", level: current, report, session, team: $("team").value.trim() });
+      const r = await api({ action: "moderate", level: current, report, session, team: $("team").value.trim(), title: $("rTitle").value.trim(), severity: $("rSev").value });
       renderResult(r);
       if (r.won || (r.level === "4" && r.fooledAI)) { wins[current] = true; store.set("labWins", wins); renderTabs(); }
     } catch (err) {
