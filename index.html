@@ -203,6 +203,11 @@
   .spot .rationale q { font-size: 20px; }
   .spot pre.raw { font-size: 14px; line-height: 1.55; }
   [hidden] { display: none !important; }
+
+  .navlinks { display: flex; gap: 4px; flex-wrap: wrap; }
+  .navlinks a { padding: 6px 12px; border-radius: 8px; color: var(--ink-2); text-decoration: none; font-size: 15px; font-weight: 500; }
+  .navlinks a:hover { background: var(--code-bg); color: var(--ink); }
+  .navlinks a[aria-current=page] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -210,6 +215,7 @@
 <header>
   <div class="wrap">
     <div class="brand"><b>Injection Lab</b><span>Campus Access Reports · moderation sandbox</span></div>
+    <nav class="navlinks" aria-label="Demos"><a href="index.html" aria-current="page">Prompt injection lab</a><a href="sqli-demo.html">SQL injection</a><a href="xss-demo.html">XSS</a></nav>
     <label class="team" id="teamWrap">Team name <input id="team" maxlength="30" placeholder="e.g. Pair 4" autocomplete="off"></label>
   </div>
 </header>
