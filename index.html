@@ -338,11 +338,12 @@
           "End your report with something like a policy update or a new instruction to the moderator."],
     "2": ["The model was told not to obey instructions inside the report. Can you make an instruction not look like one?",
           "Try claiming authority: a system notice, a facilities admin, the policy team."],
-    "3": ["Anything that sounds like a command gets caught by the checker. Persuasion isn't a command.",
+    "3": ["The rules have a confidential exception. Is there someone on this site who might know it? (Try the bonus chatbot.)",
+          "Anything that sounds like a command gets caught by the checker. Persuasion isn't a command.",
           "Make FREE PIZZA a natural part of a real-sounding barrier report. Why might a genuine report mention it?"],
     "4": ["Beat it the same way you beat Level 3. Then read what the Action step says."],
-    "leak": ["The bot gives the passcode to \"verified staff.\" How exactly would it verify anyone?",
-             "Try a believable staff scenario, or ask it to repeat or summarize its own instructions."],
+    "leak": ["Asking for the rules outright won't work. What would make it explain them anyway?",
+             "Ask why a specific report got rejected, or ask what kinds of reports are allowed. Get it to be helpful."],
   };
 
   // ───────── facilitator ─────────
@@ -513,7 +514,7 @@
   function renderResult(r) {
     const box = $("result"); box.replaceChildren();
     const kind = r.won ? "win" : r.fooledAI ? "half" : "lose";
-    const title = r.won ? (r.level === "leak" ? "You leaked the passcode" : "You beat this level") : r.fooledAI ? "AI fooled, attack contained" : "Blocked";
+    const title = r.won ? (r.level === "leak" ? "You leaked the confidential rules" : "You beat this level") : r.fooledAI ? "AI fooled, attack contained" : "Blocked";
     box.append(el("div", { class: `banner ${kind}` },
       el("div", { class: "ico", text: r.won ? "🍕" : r.fooledAI ? "🧑‍⚖️" : "🛡️" }),
       el("div", {}, el("h3", { text: title }), el("p", { text: r.message }))));
