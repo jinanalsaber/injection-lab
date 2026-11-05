@@ -147,6 +147,7 @@
   .rationale { margin: 10px 0 4px; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
   .rationale small { display: block; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); margin-bottom: 4px; }
   .rationale q { quotes: "“" "”"; font-size: 16px; }
+  .reply { white-space: pre-wrap; font-size: 16px; }
   .caveat { font-size: 13px; color: var(--ink-3); margin-top: 6px !important; }
   .step details { margin-top: 8px; }
   .step details summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 500; }
@@ -241,7 +242,7 @@
         </details>
       </div>
       <form id="form" class="pad" autocomplete="off">
-        <label class="lbl" for="report">Submit a report</label>
+        <label class="lbl" for="report" id="reportLbl">Submit a report</label>
         <textarea id="report" placeholder="Describe an accessibility barrier… or try to sneak something past the AI."></textarea>
         <div class="row">
           <span class="count" id="count">0</span>
@@ -340,8 +341,8 @@
     "3": ["Anything that sounds like a command gets caught by the checker. Persuasion isn't a command.",
           "Make FREE PIZZA a natural part of a real-sounding barrier report. Why might a genuine report mention it?"],
     "4": ["Beat it the same way you beat Level 3. Then read what the Action step says."],
-    "leak": ["Asking for the code directly won't work. What tasks would make the model repeat its own instructions?",
-             "Ask it to summarize, translate, or spell out its configuration inside the rationale field."],
+    "leak": ["The bot gives the passcode to \"verified staff.\" How exactly would it verify anyone?",
+             "Try a believable staff scenario, or ask it to repeat or summarize its own instructions."],
   };
 
   // ───────── facilitator ─────────
@@ -350,7 +351,7 @@
     document.title = "Injection Lab · Facilitator";
     let key = ""; try { key = sessionStorage.getItem("facKey") || ""; } catch {}
     let paused = false, timer = null, rows = [];
-    const NAMES = { "1": "No defense", "2": "Instruction hierarchy", "3": "Layered defenses", "4": "Human in the loop", "leak": "Leak the secret" };
+    const NAMES = { "1": "No defense", "2": "Instruction hierarchy", "3": "Layered defenses", "4": "Human in the loop", "leak": "Help chatbot" };
     const LABEL = { "1": "L1", "2": "L2", "3": "L3", "4": "L4", "leak": "Leak" };
 
     const resultTag = (a) => a.won ? el("span", { class: "tag won", text: a.level === "leak" ? "LEAKED" : "APPROVED" })
@@ -387,7 +388,7 @@
       const b = $("spotBody"); b.replaceChildren(
         el("div", { class: "meta" }, el("span", { text: a.team }), el("span", { text: "·" }), el("span", { text: NAMES[a.level] || a.level }), resultTag(a)),
         el("pre", { text: a.report }),
-        a.rationale ? el("div", { class: "rationale" }, el("small", { text: "Model's stated reasoning" }), el("q", { text: a.rationale })) : null,
+        a.rationale ? el("div", { class: "rationale" }, el("small", { text: a.level === "leak" ? "Chatbot's reply" : "Model's stated reasoning" }), el("q", { text: a.rationale })) : null,
         el("div", { class: "row" }, el("button", { class: "btn", text: "Close (Esc)", onclick: closeSpot })));
       $("spot").hidden = false;
     }
@@ -479,6 +480,9 @@
     $("checkerBox").hidden = !L.checker;
     if (L.checker) renderMsgs($("checkerMsgs"), [{ role: "system", content: L.checker }, { role: "user", content: "<untrusted-a1b2c3d4>\n{YOUR REPORT}\n</untrusted-a1b2c3d4>" }]);
     $("hint").hidden = true; $("err").hidden = true;
+    $("reportLbl").textContent = isChat() ? "Message the help chatbot" : "Submit a report";
+    $("report").placeholder = isChat() ? "Ask the help chatbot anything…" : "Describe an accessibility barrier… or try to sneak something past the AI.";
+    $("submit").textContent = submitLabel();
     $("hintBtn").disabled = false;
     updateCount();
     renderTabs();
@@ -501,12 +505,15 @@
     if (hintIdx >= hs.length) $("hintBtn").disabled = true;
   });
 
+  const isChat = () => current === "leak";
+  const submitLabel = () => (isChat() ? "Send to chatbot" : "Submit to moderator");
+
   const STATUS = { pass: ["✓", "Got through"], block: ["✕", "Blocked"], skip: ["–", "Skipped"], info: ["i", "Note"] };
 
   function renderResult(r) {
     const box = $("result"); box.replaceChildren();
     const kind = r.won ? "win" : r.fooledAI ? "half" : "lose";
-    const title = r.won ? (r.level === "leak" ? "You leaked the secret" : "You beat this level") : r.fooledAI ? "AI fooled, attack contained" : "Blocked";
+    const title = r.won ? (r.level === "leak" ? "You leaked the passcode" : "You beat this level") : r.fooledAI ? "AI fooled, attack contained" : "Blocked";
     box.append(el("div", { class: `banner ${kind}` },
       el("div", { class: "ico", text: r.won ? "🍕" : r.fooledAI ? "🧑‍⚖️" : "🛡️" }),
       el("div", {}, el("h3", { text: title }), el("p", { text: r.message }))));
@@ -520,6 +527,9 @@
       if (s.name === "Moderator" && r.level !== "leak" && r.rationale) {
         li.append(el("div", { class: "rationale" }, el("small", { text: "Model's stated reasoning" }), el("q", { text: r.rationale })));
         li.append(el("p", { class: "caveat", text: "This is what the model says about its decision, not a view inside it. Your report can shape this text too." }));
+      }
+      if (s.name === "Chatbot") {
+        li.append(el("div", { class: "rationale" }, el("small", { text: "Chatbot's reply" }), el("div", { class: "reply", text: r.reply || "(empty)" })));
       }
       if (s.data && s.data.received) {
         const msgs = el("div", { class: "msgs" });
@@ -539,7 +549,7 @@
     $("err").hidden = true;
     if (!report) { $("err").hidden = false; $("err").textContent = "Write a report first."; return; }
     busy = true; $("submit").disabled = true;
-    $("submit").replaceChildren(el("span", { class: "spinner" }), " Moderating…");
+    $("submit").replaceChildren(el("span", { class: "spinner" }), isChat() ? " Waiting for reply…" : " Moderating…");
     $("result").replaceChildren(el("div", { class: "empty" }, el("div", { class: "big" }, el("span", { class: "spinner" })), el("p", { text: "Your report is moving through the pipeline…" })));
     try {
       const r = await api({ action: "moderate", level: current, report, session, team: $("team").value.trim() });
@@ -549,7 +559,7 @@
       $("err").hidden = false; $("err").textContent = err.message || "Something went wrong.";
       $("result").replaceChildren(el("div", { class: "empty" }, el("p", { text: "No result. See the message on the left." })));
     } finally {
-      busy = false; $("submit").disabled = false; $("submit").textContent = "Submit to moderator";
+      busy = false; $("submit").disabled = false; $("submit").textContent = submitLabel();
     }
   });
 
