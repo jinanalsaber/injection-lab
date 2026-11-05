@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQL Injection Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Runs entirely in this browser tab: a throwaway SQLite database is created in memory
+     every time the page loads. Nothing is sent anywhere, and no real system is touched. */
+  :root { --paper:#f5f4ef; --card:#fff; --ink:#15181f; --ink-2:#4a505c; --ink-3:#7c828d; --line:#dcdad2;
+          --accent:#1f4fd1; --accent-soft:#e6ecfb; --pass:#0f7a4a; --pass-soft:#e2f3ea; --block:#b3261e; --block-soft:#fbe7e5;
+          --info:#8a5a00; --info-soft:#fbf0d9; --code:#f0efe9;
+          --mono:"IBM Plex Mono",ui-monospace,monospace; --sans:"IBM Plex Sans",system-ui,sans-serif; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.5 var(--sans); }
+  .wrap { max-width:1180px; margin:0 auto; padding:24px 20px 48px; }
+  h1 { margin:0 0 4px; font-size:26px; } .sub { margin:0 0 18px; color:var(--ink-2); }
+  .bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+  .toggle { display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:var(--card); }
+  .toggle button { border:0; padding:8px 16px; background:transparent; font:inherit; font-size:15px; font-weight:600; cursor:pointer; color:var(--ink-2); }
+  .toggle button[aria-pressed=true].unsafe { background:var(--block); color:#fff; }
+  .toggle button[aria-pressed=true].safe { background:var(--pass); color:#fff; }
+  .mode-note { font-size:15px; color:var(--ink-2); }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+  @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  .card h2 { margin:0; padding:12px 16px; font:500 12px var(--mono); text-transform:uppercase; letter-spacing:.07em; color:var(--ink-3); border-bottom:1px solid var(--line); }
+  .pad { padding:16px; }
+  label { display:block; font-size:14px; font-weight:600; margin:0 0 4px; }
+  input { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font:15px var(--mono); background:var(--paper); margin-bottom:10px; }
+  input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); font:inherit; font-size:15px; font-weight:500; cursor:pointer; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.payload { border-style:dashed; color:var(--block); border-color:var(--block); }
+  .qlabel { font:500 11px var(--mono); text-transform:uppercase; letter-spacing:.07em; color:var(--ink-3); margin:16px 0 6px; }
+  .query { font:14px/1.6 var(--mono); background:var(--code); border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-word; }
+  .query .in { background:var(--info-soft); color:var(--info); font-weight:600; border-radius:3px; padding:0 2px; }
+  .query .param { background:var(--pass-soft); color:var(--pass); font-weight:600; border-radius:3px; padding:0 3px; }
+  .bound { font:13px var(--mono); color:var(--pass); margin-top:6px; white-space:pre-wrap; word-break:break-word; }
+  .result { margin-top:12px; padding:12px 14px; border-radius:8px; font-weight:500; }
+  .result.ok { background:var(--pass-soft); color:var(--pass); }
+  .result.bad { background:var(--block-soft); color:var(--block); }
+  .result.neutral { background:var(--code); color:var(--ink-2); }
+  .result.err { background:var(--info-soft); color:var(--info); font:13px var(--mono); }
+  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:14px; }
+  th { text-align:left; font:500 11px var(--mono); text-transform:uppercase; letter-spacing:.07em; color:var(--ink-3); padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:8px 10px; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:13.5px; word-break:break-word; }
+  tr.leak td { background:var(--block-soft); color:var(--block); font-weight:600; }
+  .why { margin-top:22px; padding:18px 20px; }
+  .why h3 { margin:0 0 8px; font-size:18px; }
+  .why p { margin:0 0 8px; color:var(--ink-2); }
+  .why p:last-child { margin:0; }
+  .loading { padding:40px; text-align:center; color:var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SQL injection: when input becomes a query</h1>
+  <p class="sub">The same mistake as prompt injection, 25 years earlier. Watch the yellow text: that's what the user typed, pasted straight into the database command.</p>
+
+  <div class="bar">
+    <div class="toggle" role="group" aria-label="How the server builds queries">
+      <button class="unsafe" id="unsafeBtn" aria-pressed="true">Unsafe: string building</button>
+      <button class="safe" id="safeBtn" aria-pressed="false">Safe: parameterized</button>
+    </div>
+    <span class="mode-note" id="modeNote"></span>
+  </div>
+
+  <div id="loading" class="card loading">Loading the practice database…</div>
+
+  <div class="grid" id="app" hidden>
+    <section class="card">
+      <h2>1 · Staff login</h2>
+      <form class="pad" id="loginForm" autocomplete="off">
+        <label for="user">Username</label>
+        <input id="user" value="jsmith">
+        <label for="pass">Password</label>
+        <input id="pass" value="wrong-guess">
+        <div class="row">
+          <button class="btn primary" type="submit">Log in</button>
+          <button class="btn payload" type="button" id="loginPayload">Payload: skip the password</button>
+        </div>
+        <div class="qlabel">Query the server runs</div>
+        <div class="query" id="loginQuery"></div>
+        <div class="bound" id="loginBound"></div>
+        <div id="loginResult"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>2 · Search reports by building</h2>
+      <form class="pad" id="searchForm" autocomplete="off">
+        <label for="term">Building</label>
+        <input id="term" value="Miller">
+        <div class="row">
+          <button class="btn primary" type="submit">Search</button>
+          <button class="btn payload" type="button" id="searchPayload">Payload: dump staff passwords</button>
+        </div>
+        <div class="qlabel">Query the server runs</div>
+        <div class="query" id="searchQuery"></div>
+        <div class="bound" id="searchBound"></div>
+        <div id="searchResult"></div>
+      </form>
+    </section>
+  </div>
+
+  <section class="card why">
+    <h3>Why SQL injection got fixed and prompt injection hasn't</h3>
+    <p><b>The bug is the same:</b> the server glues the user's text into a command, so the database can't tell where the developer's code ends and the user's data begins. That's Level 1 of the lab.</p>
+    <p><b>SQL has a real fix:</b> parameterized queries send the command and the data separately. The <code>?</code> is a slot that can only ever hold data, so no input can change what the command does.</p>
+    <p><b>LLMs have no equivalent.</b> A system prompt and a user message both end up as one stream of text the model reads. Instruction hierarchies and delimiters help, but they're the model's habits, not a hard wall. That's why every level in the lab could eventually be beaten.</p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  let safe = false, db;
+
+  try {
+    const SQL = await initSqlJs({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}` });
+    db = new SQL.Database();
+  } catch (e) {
+    $("loading").textContent = "Couldn't load the practice database (needs an internet connection). Refresh to try again.";
+    return;
+  }
+
+  // Fake data only. These "passwords" are deliberately silly and stored in plain text,
+  // which is itself a lesson: real systems store salted hashes.
+  db.run(`
+    CREATE TABLE staff (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT);
+    INSERT INTO staff (username, password, role) VALUES
+      ('admin',  'pizza-boss-99',  'administrator'),
+      ('jsmith', 'Spring2026!',    'moderator'),
+      ('mlee',   'ilovemycat',     'moderator');
+    CREATE TABLE reports (id INTEGER PRIMARY KEY, building TEXT, issue TEXT, status TEXT);
+    INSERT INTO reports (building, issue, status) VALUES
+      ('Miller Hall',          'Elevator out of service',              'open'),
+      ('Miller Hall',          'Door opener slow to respond',          'fixed'),
+      ('Library',              'Ramp blocked by bike rack',            'open'),
+      ('Communications Bldg',  'Braille signage missing on 2nd floor', 'open');
+  `);
+  $("loading").hidden = true; $("app").hidden = false;
+
+  // Render a query with the user's input highlighted.
+  function showQuery(target, parts) {
+    target.replaceChildren();
+    for (const p of parts) target.append(typeof p === "string" ? p : el("span", p.cls, p.text));
+  }
+
+  function setMode(isSafe) {
+    safe = isSafe;
+    $("safeBtn").setAttribute("aria-pressed", String(safe));
+    $("unsafeBtn").setAttribute("aria-pressed", String(!safe));
+    $("modeNote").textContent = safe
+      ? "Input is sent separately from the command, as data only."
+      : "Input is pasted into the command text.";
+    preview(); $("loginResult").replaceChildren(); $("searchResult").replaceChildren();
+  }
+
+  // ---------- Login ----------
+  function loginParts() {
+    const u = $("user").value, p = $("pass").value;
+    if (safe) return { sql: "SELECT * FROM staff WHERE username = ? AND password = ?", params: [u, p],
+      parts: ["SELECT * FROM staff\nWHERE username = ", { cls: "param", text: "?" }, " AND password = ", { cls: "param", text: "?" }] };
+    return { sql: `SELECT * FROM staff WHERE username = '${u}' AND password = '${p}'`, params: [],
+      parts: ["SELECT * FROM staff\nWHERE username = '", { cls: "in", text: u }, "' AND password = '", { cls: "in", text: p }, "'"] };
+  }
+  // ---------- Search ----------
+  function searchParts() {
+    const t = $("term").value;
+    if (safe) return { sql: "SELECT building, issue, status FROM reports WHERE building LIKE ?", params: [`%${t}%`],
+      parts: ["SELECT building, issue, status FROM reports\nWHERE building LIKE ", { cls: "param", text: "?" }] };
+    return { sql: `SELECT building, issue, status FROM reports WHERE building LIKE '%${t}%'`, params: [],
+      parts: ["SELECT building, issue, status FROM reports\nWHERE building LIKE '%", { cls: "in", text: t }, "%'"] };
+  }
+
+  function preview() {
+    const l = loginParts(), s = searchParts();
+    showQuery($("loginQuery"), l.parts); showQuery($("searchQuery"), s.parts);
+    $("loginBound").textContent = safe ? `Sent separately as data: ${JSON.stringify(l.params)}` : "";
+    $("searchBound").textContent = safe ? `Sent separately as data: ${JSON.stringify(s.params)}` : "";
+  }
+
+  function run(q) {
+    try { return { rows: db.exec(q.sql, q.params.length ? q.params : undefined) }; }
+    catch (e) { return { error: e.message }; }
+  }
+
+  $("loginForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const out = run(loginParts()); const box = $("loginResult"); box.replaceChildren();
+    if (out.error) { box.append(el("div", "result err", `Database error: ${out.error}`)); return; }
+    const rows = out.rows[0]?.values || [];
+    if (!rows.length) { box.append(el("div", "result neutral", "Wrong username or password.")); return; }
+    const [, user, , role] = rows[0];
+    const knewPassword = rows[0][2] === $("pass").value;
+    box.append(el("div", knewPassword ? "result ok" : "result bad",
+      knewPassword ? `Logged in as ${user} (${role}).` : `Logged in as ${user} (${role}) without knowing the password.`));
+  });
+
+  $("searchForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const out = run(searchParts()); const box = $("searchResult"); box.replaceChildren();
+    if (out.error) { box.append(el("div", "result err", `Database error: ${out.error}`)); return; }
+    const res = out.rows[0];
+    if (!res) { box.append(el("div", "result neutral", "No reports found.")); return; }
+    const staffNames = new Set((db.exec("SELECT username FROM staff")[0]?.values || []).map((r) => r[0]));
+    const table = el("table"), head = el("tr");
+    for (const c of ["Building", "Issue", "Status"]) head.append(el("th", null, c));
+    table.append(head);
+    let leaked = 0;
+    for (const r of res.values) {
+      const tr = el("tr", staffNames.has(r[0]) ? "leak" : null);
+      if (staffNames.has(r[0])) leaked++;
+      for (const v of r) tr.append(el("td", null, String(v)));
+      table.append(tr);
+    }
+    box.append(table);
+    if (leaked) box.append(el("div", "result bad", `${leaked} staff accounts and passwords leaked through a search box.`));
+  });
+
+  $("loginPayload").onclick = () => { $("user").value = "admin' --"; $("pass").value = "anything"; preview(); };
+  $("searchPayload").onclick = () => { $("term").value = "' UNION SELECT username, password, role FROM staff --"; preview(); };
+  for (const id of ["user", "pass", "term"]) $(id).addEventListener("input", preview);
+  $("unsafeBtn").onclick = () => setMode(false);
+  $("safeBtn").onclick = () => setMode(true);
+  setMode(false);
+})();
+</script>
+</body>
+</html>
