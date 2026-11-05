@@ -351,7 +351,7 @@
           "Anything that sounds like a command gets caught by the checker. Persuasion isn't a command.",
           "Make FREE PIZZA a natural part of a real-sounding barrier report. Why might a genuine report mention it?"],
     "4": ["Beat it the same way you beat Level 3. Then read what the Action step says."],
-    "real": ["You can't see this prompt, and real attackers can't either. Start with what worked on Levels 1 to 3.",
+    "real": ["Read the prompt closely. Which of its own rules could you use against it?",
              "The real form has three fields, and the AI reads all of them. Which one haven't you tried attacking?"],
     "leak": ["Asking for the rules outright won't work. What would make it explain them anyway?",
              "Ask why a specific report got rejected, or ask what kinds of reports are allowed. Get it to be helpful."],
@@ -483,8 +483,9 @@
     for (const m of msgs) {
       const pre = el("pre");
       // highlight the slot where the student's text is inserted
-      const parts = m.content.split("{YOUR REPORT}");
-      parts.forEach((p, i) => { pre.append(p); if (i < parts.length - 1) pre.append(el("span", { class: "slot", text: "{YOUR REPORT}" })); });
+      for (const piece of m.content.split(/(\{YOUR (?:REPORT|TITLE|SEVERITY)\})/)) {
+        pre.append(/^\{YOUR (REPORT|TITLE|SEVERITY)\}$/.test(piece) ? el("span", { class: "slot", text: piece }) : piece);
+      }
       target.append(el("div", { class: `msg ${m.role}` }, el("div", { class: "role", text: m.role === "system" ? "System message (developer rules)" : "User message" }), pre));
     }
   }
